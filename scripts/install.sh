@@ -34,7 +34,7 @@ fi
 echo "Installing DTTD Pi node for ${DISPLAY_NAME}"
 
 apt-get update
-apt-get install -y curl git python3 avahi-daemon avahi-utils alsa-utils
+apt-get install -y curl git rsync python3 avahi-daemon avahi-utils alsa-utils
 
 # Raspotify install. If already installed, this is harmless.
 if ! command -v librespot >/dev/null 2>&1; then
@@ -74,7 +74,7 @@ chmod +x /opt/dttd-pi-node/scripts/*.sh
 
 # Allow the disco user to manage the limited services needed by the portal.
 cat >/etc/sudoers.d/dttd-node-agent <<EOF
-disco ALL=(root) NOPASSWD: /bin/systemctl restart raspotify, /bin/systemctl restart dmx-node-agent, /bin/systemctl is-active raspotify, /sbin/reboot, /opt/dttd-pi-node/scripts/healthcheck.sh, /opt/dttd-pi-node/scripts/update.sh
+disco ALL=(root) NOPASSWD: /bin/systemctl restart raspotify, /bin/systemctl restart dmx-node-agent, /bin/systemctl is-active raspotify, /sbin/reboot, /opt/dttd-pi-node/scripts/healthcheck.sh, /opt/dttd-pi-node/scripts/update.sh, /opt/dttd-pi-node/scripts/set-usb-audio.sh
 EOF
 chmod 440 /etc/sudoers.d/dttd-node-agent
 
@@ -92,4 +92,6 @@ echo "Next:"
 echo "1. Open Spotify on your phone"
 echo "2. Select ${DISPLAY_NAME}"
 echo "3. Play a track for 5-10 seconds to pair/cache the Spotify Connect speaker"
-echo "4. Refresh Spotify Tools in the DJ portal"
+echo "4. If using USB audio, run:"
+echo "   sudo /opt/dttd-pi-node/scripts/set-usb-audio.sh"
+echo "5. Refresh Spotify Tools in the DJ portal"

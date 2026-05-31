@@ -11,9 +11,13 @@ cat /etc/dmx-node.conf || true
 echo
 
 echo "--- Services ---"
-systemctl is-active raspotify || true
-systemctl is-active dmx-node-agent || true
-systemctl is-active avahi-daemon || true
+echo "raspotify: $(systemctl is-active raspotify || true)"
+echo "dmx-node-agent: $(systemctl is-active dmx-node-agent || true)"
+echo "avahi-daemon: $(systemctl is-active avahi-daemon || true)"
+echo
+
+echo "--- ALSA playback devices ---"
+aplay -l || true
 echo
 
 echo "--- Raspotify environment ---"
@@ -29,7 +33,7 @@ fi
 echo
 
 echo "--- Recent Raspotify log ---"
-journalctl -u raspotify -n 30 --no-pager -o cat || true
+journalctl -u raspotify -n 40 --no-pager -o cat || true
 echo
 
 echo "--- Recent Agent log ---"
