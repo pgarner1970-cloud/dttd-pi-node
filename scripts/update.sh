@@ -18,5 +18,4 @@ python3 -m py_compile "$REPO_DIR/agent/dmx-node-agent.py"
 chmod +x "$REPO_DIR/agent/dmx-node-agent.py"
 chmod +x "$REPO_DIR/scripts/"*.sh
 
-# Do not restart dmx-node-agent here. The agent must report command completion first.
 echo "DTTD Pi node update complete. Use Restart Agent afterwards if needed."

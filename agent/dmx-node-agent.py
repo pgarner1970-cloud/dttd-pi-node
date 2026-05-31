@@ -39,7 +39,7 @@ def post_json(url, payload):
         headers={
             "Content-Type": "application/json",
             "X-DMX-Node-Secret": SECRET,
-            "User-Agent": "DMX-Node-Agent/2.2",
+            "User-Agent": "DMX-Node-Agent/2.3",
         },
         method="POST",
     )
@@ -157,7 +157,6 @@ def poll_command():
 
 def main():
     print("DMX node agent starting...", flush=True)
-
     while True:
         try:
             send_heartbeat()

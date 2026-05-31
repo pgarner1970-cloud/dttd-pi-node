@@ -34,7 +34,7 @@ if ! aplay -l | grep -q "AB13X USB Audio"; then
   exit 1
 fi
 
-# Use the stable ALSA card name, not a changing card number.
+# Use the stable ALSA card name, not changing card numbers.
 ALSA_DEVICE="plughw:Audio,0"
 
 echo "Configuring Raspotify/librespot to use stable ALSA device: ${ALSA_DEVICE}"
@@ -61,7 +61,6 @@ EOF
 sed -i 's/^LIBRESPOT_DISABLE_CREDENTIAL_CACHE=/#LIBRESPOT_DISABLE_CREDENTIAL_CACHE=/' /etc/raspotify/conf || true
 sed -i 's/^LIBRESPOT_ACCESS_TOKEN=/#LIBRESPOT_ACCESS_TOKEN=/' /etc/raspotify/conf || true
 
-# Set PCM where available. This adapter uses PCM rather than Master.
 CARD="$(aplay -l | awk '/AB13X USB Audio/ {gsub("card ","",$2); gsub(":","",$2); print $2; exit}')"
 if [ -n "$CARD" ]; then
   amixer -c "$CARD" sset PCM 85% >/dev/null 2>&1 || true
@@ -73,7 +72,5 @@ systemctl reset-failed raspotify || true
 systemctl restart raspotify
 
 echo
-echo "Raspotify audio device updated."
-echo "Check with:"
-echo "  sudo systemctl show raspotify -p Environment --no-pager -l"
-echo "  alsamixer"
+echo "Raspotify USB audio configuration updated."
+echo "Device: ${ALSA_DEVICE}"
