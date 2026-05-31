@@ -1,0 +1,15 @@
+[Unit]
+Description=DMX Node Heartbeat Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/dttd-pi-node/agent/dmx-node-agent.py
+Restart=always
+RestartSec=8
+WorkingDirectory=/opt/dttd-pi-node
+User=disco
+
+[Install]
+WantedBy=multi-user.target
