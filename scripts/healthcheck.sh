@@ -1,5 +1,6 @@
-#!/usr/bin/env bash
-set -euo pipefail
+\
+#!/bin/bash
+set -eu
 
 echo "=== DTTD Pi Node Healthcheck ==="
 echo "Hostname: $(hostname)"
@@ -18,6 +19,16 @@ echo
 
 echo "--- ALSA playback devices ---"
 aplay -l || true
+echo
+
+echo "--- USB audio mixer ---"
+CARD="$(aplay -l 2>/dev/null | awk '/AB13X USB Audio/ {gsub("card ","",$2); gsub(":","",$2); print $2; exit}')"
+if [ -n "$CARD" ]; then
+  echo "AB13X USB Audio card number: $CARD"
+  amixer -c "$CARD" || true
+else
+  echo "AB13X USB Audio not currently detected"
+fi
 echo
 
 echo "--- Raspotify environment ---"

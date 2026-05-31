@@ -1,11 +1,12 @@
-#!/usr/bin/env bash
-set -euo pipefail
+\
+#!/bin/bash
+set -eu
 
 CONFIG_FILE="/etc/dmx-node.conf"
 RASPOTIFY_OVERRIDE_DIR="/etc/systemd/system/raspotify.service.d"
 RASPOTIFY_OVERRIDE_FILE="${RASPOTIFY_OVERRIDE_DIR}/override.conf"
 
-if [[ "$(id -u)" -ne 0 ]]; then
+if [ "$(id -u)" -ne 0 ]; then
   echo "Run this script with sudo"
   exit 1
 fi
@@ -15,54 +16,57 @@ if ! command -v aplay >/dev/null 2>&1; then
   apt-get install -y alsa-utils
 fi
 
-SPOTIFY_NAME="DMX Deck"
-if [[ -f "$CONFIG_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$CONFIG_FILE" || true
-  SPOTIFY_NAME="${SPOTIFY_NAME:-${DISPLAY_NAME:-DMX Deck}}"
+SPOTIFY_NAME="DMX Deck A"
+if [ -f "$CONFIG_FILE" ]; then
+  FOUND_NAME="$(grep '^SPOTIFY_NAME=' "$CONFIG_FILE" | head -n1 | cut -d= -f2- | sed 's/^"//;s/"$//' || true)"
+  if [ -n "$FOUND_NAME" ]; then
+    SPOTIFY_NAME="$FOUND_NAME"
+  fi
 fi
-
-REQUESTED_DEVICE="${1:-}"
 
 echo "Available ALSA playback devices:"
 aplay -l || true
 echo
 
-if [[ -n "$REQUESTED_DEVICE" ]]; then
-  ALSA_DEVICE="$REQUESTED_DEVICE"
-else
-  # Prefer the first USB audio playback device.
-  USB_LINE="$(aplay -l 2>/dev/null | awk '/^card [0-9]+:/ && /USB|usb|Audio|audio/ {print; exit}')"
-
-  if [[ -z "$USB_LINE" ]]; then
-    echo "No obvious USB audio card was found."
-    echo "You can specify one manually, for example:"
-    echo "  sudo /opt/dttd-pi-node/scripts/set-usb-audio.sh plughw:1,0"
-    exit 1
-  fi
-
-  CARD="$(echo "$USB_LINE" | sed -n 's/^card \([0-9][0-9]*\):.*/\1/p')"
-  DEVICE="0"
-  ALSA_DEVICE="plughw:${CARD},${DEVICE}"
+if ! aplay -l | grep -q "AB13X USB Audio"; then
+  echo "AB13X USB Audio was not found."
+  echo "Make sure the USB audio adapter is plugged in before starting the Pi."
+  exit 1
 fi
 
-echo "Configuring Raspotify/librespot to use ALSA device: ${ALSA_DEVICE}"
+# Use the stable ALSA card name, not a changing card number.
+ALSA_DEVICE="plughw:Audio,0"
+
+echo "Configuring Raspotify/librespot to use stable ALSA device: ${ALSA_DEVICE}"
 
 mkdir -p "$RASPOTIFY_OVERRIDE_DIR"
 
 cat >"$RASPOTIFY_OVERRIDE_FILE" <<EOF
+[Unit]
+After=sound.target network-online.target
+Wants=network-online.target
+
 [Service]
+ExecStartPre=/bin/sleep 8
+
 Environment="LIBRESPOT_NAME=${SPOTIFY_NAME}"
 Environment="LIBRESPOT_BACKEND=alsa"
 Environment="LIBRESPOT_DEVICE=${ALSA_DEVICE}"
+Environment="LIBRESPOT_INITIAL_VOLUME=85"
 Environment="LIBRESPOT_DEVICE_TYPE=speaker"
 Environment="LIBRESPOT_DISCOVERY_BACKEND=avahi"
 Environment="HOME=/var/lib/raspotify"
 EOF
 
-# Keep credential cache enabled for the one-time Spotify phone pairing.
 sed -i 's/^LIBRESPOT_DISABLE_CREDENTIAL_CACHE=/#LIBRESPOT_DISABLE_CREDENTIAL_CACHE=/' /etc/raspotify/conf || true
 sed -i 's/^LIBRESPOT_ACCESS_TOKEN=/#LIBRESPOT_ACCESS_TOKEN=/' /etc/raspotify/conf || true
+
+# Set PCM where available. This adapter uses PCM rather than Master.
+CARD="$(aplay -l | awk '/AB13X USB Audio/ {gsub("card ","",$2); gsub(":","",$2); print $2; exit}')"
+if [ -n "$CARD" ]; then
+  amixer -c "$CARD" sset PCM 85% >/dev/null 2>&1 || true
+  alsactl store || true
+fi
 
 systemctl daemon-reload
 systemctl reset-failed raspotify || true
@@ -72,4 +76,4 @@ echo
 echo "Raspotify audio device updated."
 echo "Check with:"
 echo "  sudo systemctl show raspotify -p Environment --no-pager -l"
-echo "  sudo journalctl -u raspotify -n 60 --no-pager -o cat"
+echo "  alsamixer"
