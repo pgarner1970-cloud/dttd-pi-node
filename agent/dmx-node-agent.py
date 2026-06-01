@@ -103,6 +103,7 @@ def run_command(command_name, payload):
         "restart_raspotify": ["sudo", "systemctl", "restart", "raspotify"],
         "restart_agent": ["sudo", "systemctl", "restart", "dmx-node-agent"],
         "reboot": ["sudo", "reboot"],
+        "shutdown": ["sudo", "shutdown", "-h", "now"],
         "healthcheck": ["sudo", "/opt/dttd-pi-node/scripts/healthcheck.sh"],
         "update_agent": ["sudo", "/opt/dttd-pi-node/scripts/update.sh"],
     }
@@ -146,6 +147,8 @@ def poll_command():
 
     if command_name == "reboot":
         result = "Reboot command accepted"
+    elif command_name == "shutdown":
+        result = "Shutdown command accepted"
 
     post_json(COMMAND_URL, {
         "mode": "complete",

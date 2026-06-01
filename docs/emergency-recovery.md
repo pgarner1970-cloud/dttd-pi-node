@@ -41,3 +41,14 @@ From the portal use Reboot Node, or via SSH:
 ```bash
 sudo reboot
 ```
+
+
+## Safe shutdown
+
+Use the DJ portal Shutdown Deck button where possible, or via SSH:
+
+```bash
+sudo shutdown -h now
+```
+
+Wait for the Pi activity LED to stop flashing before removing power.
