@@ -99,13 +99,15 @@ def run_command(command_name, payload):
     if command_name == "set_volume":
         return run_shell(["sudo", "/opt/dttd-pi-node/scripts/set-volume.sh", str(payload_volume(payload))], timeout=120)
 
+    if command_name == "update_agent":
+        return run_shell(["sudo", "/opt/dttd-pi-node/scripts/update.sh"], timeout=300)
+
     allowed = {
         "restart_raspotify": ["sudo", "systemctl", "restart", "raspotify"],
         "restart_agent": ["sudo", "systemctl", "restart", "dmx-node-agent"],
         "reboot": ["sudo", "reboot"],
         "shutdown": ["sudo", "shutdown", "-h", "now"],
         "healthcheck": ["sudo", "/opt/dttd-pi-node/scripts/healthcheck.sh"],
-        "update_agent": ["sudo", "/opt/dttd-pi-node/scripts/update.sh"],
     }
 
     if command_name not in allowed:
@@ -157,6 +159,11 @@ def poll_command():
         "status": status,
         "result": result,
     })
+
+    # Load the newly pulled agent code automatically after a successful update.
+    # This happens after the command result has been reported to the portal.
+    if command_name == "update_agent" and status == "completed":
+        subprocess.Popen(["sudo", "systemctl", "restart", "dmx-node-agent"])
 
 def main():
     print("DMX node agent starting...", flush=True)
