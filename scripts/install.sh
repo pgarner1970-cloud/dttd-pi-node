@@ -34,7 +34,7 @@ fi
 echo "Installing DTTD Pi node for ${DISPLAY_NAME}"
 
 apt-get update
-apt-get install -y curl git rsync python3 avahi-daemon avahi-utils alsa-utils
+apt-get install -y curl git rsync python3 avahi-daemon avahi-utils alsa-utils cifs-utils mpd mpc
 
 # Raspotify install. If already installed, this is harmless.
 if ! command -v librespot >/dev/null 2>&1; then
@@ -71,10 +71,11 @@ sed -i 's/^LIBRESPOT_ACCESS_TOKEN=/#LIBRESPOT_ACCESS_TOKEN=/' /etc/raspotify/con
 cp /opt/dttd-pi-node/systemd/dmx-node-agent.service /etc/systemd/system/dmx-node-agent.service
 chmod +x /opt/dttd-pi-node/agent/dmx-node-agent.py
 chmod +x /opt/dttd-pi-node/scripts/*.sh
+/opt/dttd-pi-node/scripts/install-local-mpd.sh
 
 # Allow the disco user to manage the limited services needed by the portal.
 cat >/etc/sudoers.d/dttd-node-agent <<EOF
-disco ALL=(root) NOPASSWD: /bin/systemctl restart raspotify, /bin/systemctl restart dmx-node-agent, /bin/systemctl is-active raspotify, /sbin/reboot, /usr/sbin/reboot, /sbin/shutdown, /usr/sbin/shutdown, /opt/dttd-pi-node/scripts/healthcheck.sh, /opt/dttd-pi-node/scripts/update.sh, /opt/dttd-pi-node/scripts/set-usb-audio.sh, /opt/dttd-pi-node/scripts/set-volume.sh
+disco ALL=(root) NOPASSWD: /bin/systemctl restart raspotify, /bin/systemctl restart dmx-node-agent, /bin/systemctl restart mpd, /bin/systemctl is-active raspotify, /bin/systemctl is-active mpd, /sbin/reboot, /usr/sbin/reboot, /sbin/shutdown, /usr/sbin/shutdown, /opt/dttd-pi-node/scripts/healthcheck.sh, /opt/dttd-pi-node/scripts/update.sh, /opt/dttd-pi-node/scripts/set-usb-audio.sh, /opt/dttd-pi-node/scripts/set-volume.sh, /opt/dttd-pi-node/scripts/install-local-mpd.sh
 EOF
 chmod 440 /etc/sudoers.d/dttd-node-agent
 

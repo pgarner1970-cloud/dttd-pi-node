@@ -72,6 +72,11 @@ log "Applying executable permissions"
 chmod +x "$REPO_DIR/agent/dmx-node-agent.py"
 find "$REPO_DIR/scripts" -type f -name '*.sh' -exec chmod +x {} \;
 
+if [[ "${DTTD_ENABLE_LOCAL_MPD:-1}" == "1" && -x "$REPO_DIR/scripts/install-local-mpd.sh" ]]; then
+  log "Ensuring MPD local playback support is installed"
+  "$REPO_DIR/scripts/install-local-mpd.sh" >>"$LOG_FILE" 2>&1 || fail "MPD local playback setup failed"
+fi
+
 # Refresh installed service file if it changed in Git.
 if [[ -f "$REPO_DIR/systemd/dmx-node-agent.service" ]]; then
   cp "$REPO_DIR/systemd/dmx-node-agent.service" /etc/systemd/system/dmx-node-agent.service

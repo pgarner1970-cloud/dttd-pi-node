@@ -1,4 +1,3 @@
-\
 #!/bin/bash
 set -eu
 
@@ -15,6 +14,7 @@ echo "--- Services ---"
 echo "raspotify: $(systemctl is-active raspotify || true)"
 echo "dmx-node-agent: $(systemctl is-active dmx-node-agent || true)"
 echo "avahi-daemon: $(systemctl is-active avahi-daemon || true)"
+echo "mpd: $(systemctl is-active mpd || true)"
 echo
 
 echo "--- ALSA playback devices ---"
@@ -41,6 +41,24 @@ if command -v avahi-browse >/dev/null 2>&1; then
 else
   echo "avahi-browse not installed"
 fi
+echo
+
+echo "--- Local music / MPD ---"
+echo "Mount /mnt/dttd-music:"
+findmnt /mnt/dttd-music || true
+echo
+echo "MPD status:"
+if command -v mpc >/dev/null 2>&1; then
+  mpc status || true
+  echo
+  echo "MPD stats:"
+  mpc stats || true
+else
+  echo "mpc not installed"
+fi
+echo
+echo "Local audio files visible:"
+find /mnt/dttd-music -maxdepth 2 -type f \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' -o -iname '*.m4a' \) 2>/dev/null | head -10 || true
 echo
 
 echo "--- Recent Raspotify log ---"
