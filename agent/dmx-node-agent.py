@@ -10,7 +10,8 @@ import urllib.request
 import urllib.error
 
 CONFIG_FILE = "/etc/dmx-node.conf"
-INTERVAL_SECONDS = 15
+HEARTBEAT_INTERVAL_SECONDS = 15
+COMMAND_POLL_INTERVAL_SECONDS = 1
 
 def read_config(path=CONFIG_FILE):
     config = {}
@@ -167,44 +168,25 @@ def local_prepare(payload):
     if not os.path.isfile(full):
         return False, "Local track file not found: " + rel
 
-    position_seconds = seconds_from_ms(payload.get("position_ms", 0))
-    previous_volume = mpc_volume_value(default=85)
-
     try:
+        # Safe cue-only prepare. Do not start muted playback here: on some MPD
+        # builds that advanced the track silently and caused delayed/offset audio.
         run_mpc_required(["stop"], timeout=20)
         run_mpc_required(["clear"], timeout=20)
         ok, add_out = run_mpc(["add", rel], timeout=30)
         if not ok:
+            # The MPD database may not have seen newly synced files yet.
             run_mpc(["update", "--wait"], timeout=180)
             ok, add_out = run_mpc(["add", rel], timeout=30)
             if not ok:
                 raise RuntimeError(add_out)
-
-        # Warm the MPD/Samba/ALSA path while the deck is only loaded, not live.
-        # Volume is temporarily muted so no buffer/opening artefact is heard.
-        run_mpc(["volume", "0"], timeout=15)
-        run_mpc_required(["play"], timeout=20)
-
-        deadline = time.time() + 6
-        while time.time() < deadline:
-            status = mpc_status_text()
-            if "[playing]" in status or "[paused]" in status:
-                break
-            time.sleep(0.2)
-
-        if position_seconds > 0:
-            run_mpc(["seek", str(position_seconds)], timeout=20)
-        else:
-            run_mpc(["seek", "0"], timeout=20)
-        run_mpc_required(["pause"], timeout=20)
-        run_mpc(["volume", str(previous_volume)], timeout=15)
+        run_mpc(["stop"], timeout=20)
 
         title = payload.get("title") or rel
         artist = payload.get("artist") or ""
         label = (str(artist) + " - " if artist else "") + str(title)
-        return True, "Local track prepared via MPD: " + label
+        return True, "Local track queued ready via MPD: " + label
     except Exception as e:
-        run_mpc(["volume", str(previous_volume)], timeout=15)
         return False, "Local prepare failed: " + str(e)
 
 def local_play(payload):
@@ -387,9 +369,13 @@ def poll_command():
 
 def main():
     print("DMX node agent starting...", flush=True)
+    last_heartbeat = 0
     while True:
         try:
-            send_heartbeat()
+            now = time.time()
+            if now - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
+                send_heartbeat()
+                last_heartbeat = now
             poll_command()
         except urllib.error.HTTPError as e:
             print("HTTP error:", e.code, e.reason, flush=True)
@@ -401,7 +387,7 @@ def main():
             print("Agent error:", str(e), flush=True)
             traceback.print_exc()
 
-        time.sleep(INTERVAL_SECONDS)
+        time.sleep(COMMAND_POLL_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
     main()
