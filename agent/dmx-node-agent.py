@@ -129,11 +129,83 @@ def run_mpc_required(args, timeout=60):
         raise RuntimeError(out)
     return out
 
+def mpc_current_playlist_files():
+    ok, out = run_mpc(["playlist", "-f", "%file%"], timeout=20)
+    if not ok:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+def mpc_status_text():
+    ok, out = run_mpc(["status"], timeout=15)
+    return out if ok else ""
+
+def mpc_volume_value(default=85):
+    status = mpc_status_text()
+    match = re.search(r"volume:\s*(\d+)%", status)
+    if match:
+        try:
+            return max(0, min(100, int(match.group(1))))
+        except Exception:
+            pass
+    return default
+
+def local_playlist_has_track(rel):
+    files = mpc_current_playlist_files()
+    return bool(files) and files[0] == rel
+
 def seconds_from_ms(value):
     try:
         return max(0, int(int(value) / 1000))
     except Exception:
         return 0
+
+def local_prepare(payload):
+    payload = ensure_payload_dict(payload)
+    rel, full = local_absolute_path(payload.get("relative_path") or payload.get("local_path") or payload.get("path"))
+    if not local_mount_ready():
+        return False, "Local music mount is not ready: " + LOCAL_MUSIC_MOUNT
+    if not os.path.isfile(full):
+        return False, "Local track file not found: " + rel
+
+    position_seconds = seconds_from_ms(payload.get("position_ms", 0))
+    previous_volume = mpc_volume_value(default=85)
+
+    try:
+        run_mpc_required(["stop"], timeout=20)
+        run_mpc_required(["clear"], timeout=20)
+        ok, add_out = run_mpc(["add", rel], timeout=30)
+        if not ok:
+            run_mpc(["update", "--wait"], timeout=180)
+            ok, add_out = run_mpc(["add", rel], timeout=30)
+            if not ok:
+                raise RuntimeError(add_out)
+
+        # Warm the MPD/Samba/ALSA path while the deck is only loaded, not live.
+        # Volume is temporarily muted so no buffer/opening artefact is heard.
+        run_mpc(["volume", "0"], timeout=15)
+        run_mpc_required(["play"], timeout=20)
+
+        deadline = time.time() + 6
+        while time.time() < deadline:
+            status = mpc_status_text()
+            if "[playing]" in status or "[paused]" in status:
+                break
+            time.sleep(0.2)
+
+        if position_seconds > 0:
+            run_mpc(["seek", str(position_seconds)], timeout=20)
+        else:
+            run_mpc(["seek", "0"], timeout=20)
+        run_mpc_required(["pause"], timeout=20)
+        run_mpc(["volume", str(previous_volume)], timeout=15)
+
+        title = payload.get("title") or rel
+        artist = payload.get("artist") or ""
+        label = (str(artist) + " - " if artist else "") + str(title)
+        return True, "Local track prepared via MPD: " + label
+    except Exception as e:
+        run_mpc(["volume", str(previous_volume)], timeout=15)
+        return False, "Local prepare failed: " + str(e)
 
 def local_play(payload):
     payload = ensure_payload_dict(payload)
@@ -146,18 +218,25 @@ def local_play(payload):
     position_seconds = seconds_from_ms(payload.get("position_ms", 0))
 
     try:
-        run_mpc_required(["stop"], timeout=20)
-        run_mpc_required(["clear"], timeout=20)
-        ok, add_out = run_mpc(["add", rel], timeout=30)
-        if not ok:
-            # The MPD database may not have seen newly synced files yet.
-            run_mpc(["update", "--wait"], timeout=180)
+        if local_playlist_has_track(rel):
+            # Prepared path: the track is already queued and paused by local_prepare.
+            if position_seconds > 0:
+                run_mpc_required(["seek", str(position_seconds)], timeout=20)
+            run_mpc_required(["play"], timeout=20)
+        else:
+            # Fallback path: still works if prepare was missed or failed.
+            run_mpc_required(["stop"], timeout=20)
+            run_mpc_required(["clear"], timeout=20)
             ok, add_out = run_mpc(["add", rel], timeout=30)
             if not ok:
-                raise RuntimeError(add_out)
-        run_mpc_required(["play"], timeout=20)
-        if position_seconds > 0:
-            run_mpc_required(["seek", str(position_seconds)], timeout=20)
+                # The MPD database may not have seen newly synced files yet.
+                run_mpc(["update", "--wait"], timeout=180)
+                ok, add_out = run_mpc(["add", rel], timeout=30)
+                if not ok:
+                    raise RuntimeError(add_out)
+            run_mpc_required(["play"], timeout=20)
+            if position_seconds > 0:
+                run_mpc_required(["seek", str(position_seconds)], timeout=20)
         title = payload.get("title") or rel
         artist = payload.get("artist") or ""
         label = (str(artist) + " - " if artist else "") + str(title)
@@ -219,6 +298,9 @@ def run_command(command_name, payload):
 
     if command_name == "set_volume":
         return run_shell(["sudo", "/opt/dttd-pi-node/scripts/set-volume.sh", str(payload_volume(payload))], timeout=120)
+
+    if command_name == "local_prepare":
+        return local_prepare(payload)
 
     if command_name == "local_play":
         return local_play(payload)
