@@ -9,8 +9,8 @@ Supported portal commands:
 - `display_lite` - start/restart the display in lite mode.
 - `display_full` - start/restart the display in full mode.
 - `display_stop` - stop the HDMI display browser only.
-- `display_blank` - ask the HDMI output to sleep/blank.
-- `display_wake` - wake the HDMI output.
+- `display_blank` - blank the HDMI display by switching the kiosk browser to a plain black page. This avoids unreliable `xset dpms` behaviour on Wayland/labwc Raspberry Pi desktops.
+- `display_wake` - restart the display using `DISPLAY_DEFAULT_MODE` from `/etc/dmx-node.conf` (`lite` by default).
 - `display_status` - return JSON status for the display browser.
 
 The display controls do not stop `librespot`, `raspotify`, MPD or local music playback.

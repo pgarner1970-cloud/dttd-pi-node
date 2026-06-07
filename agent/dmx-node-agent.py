@@ -41,6 +41,7 @@ DISPLAY_URL_LITE = CONFIG.get("DISPLAY_URL_LITE", "https://live.dancethruthedeca
 DISPLAY_BROWSER = CONFIG.get("DISPLAY_BROWSER", "").strip()
 DISPLAY_PROFILE_BASE = CONFIG.get("DISPLAY_PROFILE_BASE", "/home/disco/.config/dttd-display-chromium")
 DISPLAY_LOG = CONFIG.get("DISPLAY_LOG", "/tmp/dttd-display.log")
+DISPLAY_DEFAULT_MODE = CONFIG.get("DISPLAY_DEFAULT_MODE", "lite").strip().lower()
 
 
 def post_json(url, payload):
@@ -295,10 +296,24 @@ def display_mode_from_payload(payload):
     return "full" if mode == "full" else "lite"
 
 def display_url_for_mode(mode):
+    if mode == "blank":
+        return display_blank_url()
     return DISPLAY_URL_FULL if mode == "full" else DISPLAY_URL_LITE
 
+def display_blank_url():
+    html = (
+        "<html><head><title>DTTD Display Blank</title>"
+        "<meta name='robots' content='noindex,nofollow'>"
+        "<style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;cursor:none}</style>"
+        "</head><body></body></html>"
+    )
+    return "data:text/html," + html
+
 def display_profile_for_mode(mode):
-    suffix = "full" if mode == "full" else "lite"
+    if mode == "blank":
+        suffix = "blank"
+    else:
+        suffix = "full" if mode == "full" else "lite"
     return DISPLAY_PROFILE_BASE + "-" + suffix
 
 def display_process_lines():
@@ -329,7 +344,9 @@ def display_stop(payload=None):
 
 def display_start(payload=None):
     payload = ensure_payload_dict(payload)
-    mode = display_mode_from_payload(payload)
+    mode = str(payload.get("mode", "lite") or "lite").strip().lower()
+    if mode not in ("full", "lite", "blank"):
+        mode = "lite"
     url = str(payload.get("url") or display_url_for_mode(mode))
     browser = display_browser_path()
     profile = display_profile_for_mode(mode)
@@ -369,7 +386,9 @@ def display_start(payload=None):
 
     time.sleep(3)
     if not display_running():
-        return False, "Display browser start command ran but no display process is running"
+        return False, "Display browser start command ran but no display process is running. If this node is player-only, disable display controls for it."
+    if mode == "blank":
+        return True, "Display blanked using black kiosk page"
     return True, "Display browser started in %s mode: %s" % (mode, url)
 
 def display_restart(payload=None):
@@ -379,12 +398,17 @@ def display_restart(payload=None):
     return ok, "Display restart: " + out
 
 def display_blank(payload=None):
-    ok, out = run_shell(["/usr/bin/env", "bash", "-lc", "DISPLAY=:0 xset dpms force off || DISPLAY=:0 xset s activate"], timeout=20)
-    return ok, out
+    # Wayland/labwc desktops on Raspberry Pi often do not expose DPMS to xset,
+    # so xset can return usage text or fail even when the desktop is healthy.
+    # Use a black kiosk page instead; this is reliable and does not touch audio.
+    try:
+        return display_start({"mode": "blank"})
+    except Exception as e:
+        return False, "Display blank failed: " + str(e)
 
 def display_wake(payload=None):
-    ok, out = run_shell(["/usr/bin/env", "bash", "-lc", "DISPLAY=:0 xset dpms force on || DISPLAY=:0 xset s reset"], timeout=20)
-    return ok, out
+    mode = DISPLAY_DEFAULT_MODE if DISPLAY_DEFAULT_MODE in ("full", "lite") else "lite"
+    return display_start({"mode": mode})
 
 def display_status(payload=None):
     lines = display_process_lines()
@@ -392,7 +416,9 @@ def display_status(payload=None):
     url = ""
     if lines:
         joined = " ".join(lines)
-        if "mode=lite" in joined or "-lite" in joined:
+        if "-blank" in joined or "DTTD%20Display%20Blank" in joined or "data:text/html" in joined:
+            mode = "blank"
+        elif "mode=lite" in joined or "-lite" in joined:
             mode = "lite"
         elif "-full" in joined:
             mode = "full"
