@@ -61,6 +61,17 @@ echo "Local audio files visible:"
 find /mnt/dttd-music -maxdepth 2 -type f \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' -o -iname '*.m4a' \) 2>/dev/null | head -10 || true
 echo
 
+
+echo "--- HDMI display kiosk ---"
+echo "Chromium processes:"
+pgrep -af 'dttd-display-chromium|live.dancethruthedecades' || true
+echo
+echo "Display log tail:"
+tail -20 /tmp/dttd-display.log 2>/dev/null || true
+echo
+echo "Memory:"
+free -h || true
+echo
 echo "--- Recent Raspotify log ---"
 journalctl -u raspotify -n 40 --no-pager -o cat || true
 echo

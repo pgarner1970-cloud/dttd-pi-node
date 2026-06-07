@@ -4,6 +4,7 @@ import os
 import re
 import socket
 import subprocess
+import shutil
 import time
 import traceback
 import urllib.request
@@ -35,6 +36,11 @@ SPOTIFY_NAME = CONFIG.get("SPOTIFY_NAME", DISPLAY_NAME)
 LOCAL_MUSIC_MOUNT = CONFIG.get("LOCAL_MUSIC_MOUNT", "/mnt/dttd-music").rstrip("/")
 MPD_HOST = CONFIG.get("MPD_HOST", "localhost")
 MPD_PORT = CONFIG.get("MPD_PORT", "6600")
+DISPLAY_URL_FULL = CONFIG.get("DISPLAY_URL_FULL", "https://live.dancethruthedecades.co.uk/")
+DISPLAY_URL_LITE = CONFIG.get("DISPLAY_URL_LITE", "https://live.dancethruthedecades.co.uk/?mode=lite")
+DISPLAY_BROWSER = CONFIG.get("DISPLAY_BROWSER", "").strip()
+DISPLAY_PROFILE_BASE = CONFIG.get("DISPLAY_PROFILE_BASE", "/home/disco/.config/dttd-display-chromium")
+DISPLAY_LOG = CONFIG.get("DISPLAY_LOG", "/tmp/dttd-display.log")
 
 
 def post_json(url, payload):
@@ -266,6 +272,140 @@ def local_status(payload=None):
     ok, status = run_mpc(["status"], timeout=15)
     return ok, "mount=%s; mpd=%s; %s" % (mount, mpd, status)
 
+def display_browser_path():
+    candidates = []
+    if DISPLAY_BROWSER:
+        candidates.append(DISPLAY_BROWSER)
+    candidates += [
+        "/usr/lib/chromium/chromium",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    found = shutil.which("chromium") or shutil.which("chromium-browser")
+    if found:
+        return found
+    raise RuntimeError("No Chromium browser binary was found")
+
+def display_mode_from_payload(payload):
+    payload = ensure_payload_dict(payload)
+    mode = str(payload.get("mode", "lite") or "lite").strip().lower()
+    return "full" if mode == "full" else "lite"
+
+def display_url_for_mode(mode):
+    return DISPLAY_URL_FULL if mode == "full" else DISPLAY_URL_LITE
+
+def display_profile_for_mode(mode):
+    suffix = "full" if mode == "full" else "lite"
+    return DISPLAY_PROFILE_BASE + "-" + suffix
+
+def display_process_lines():
+    try:
+        result = subprocess.run(
+            ["pgrep", "-af", "dttd-display-chromium"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except Exception:
+        return []
+
+def display_running():
+    return bool(display_process_lines())
+
+def display_stop(payload=None):
+    lines = display_process_lines()
+    if not lines:
+        return True, "Display browser was not running"
+    subprocess.run(["pkill", "-f", "dttd-display-chromium"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+    time.sleep(1)
+    if display_running():
+        return False, "Display browser stop requested but process is still running"
+    return True, "Display browser stopped"
+
+def display_start(payload=None):
+    payload = ensure_payload_dict(payload)
+    mode = display_mode_from_payload(payload)
+    url = str(payload.get("url") or display_url_for_mode(mode))
+    browser = display_browser_path()
+    profile = display_profile_for_mode(mode)
+    os.makedirs(profile, exist_ok=True)
+
+    # Stop any previous kiosk instance using our dedicated profile first.
+    display_stop()
+
+    env = os.environ.copy()
+    env.setdefault("DISPLAY", ":0")
+    env.setdefault("XDG_RUNTIME_DIR", "/run/user/%s" % os.getuid())
+
+    command = [
+        browser,
+        "--kiosk",
+        "--ozone-platform=x11",
+        "--noerrdialogs",
+        "--disable-infobars",
+        "--disable-session-crashed-bubble",
+        "--disable-features=TranslateUI,MediaRouter,OptimizationHints",
+        "--password-store=basic",
+        "--no-first-run",
+        "--disable-save-password-bubble",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--user-data-dir=" + profile,
+        url,
+    ]
+
+    with open(DISPLAY_LOG, "a", encoding="utf-8") as log:
+        log.write("\n--- starting display mode=%s url=%s at %s ---\n" % (mode, url, time.strftime("%Y-%m-%d %H:%M:%S")))
+        subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+
+    time.sleep(3)
+    if not display_running():
+        return False, "Display browser start command ran but no display process is running"
+    return True, "Display browser started in %s mode: %s" % (mode, url)
+
+def display_restart(payload=None):
+    payload = ensure_payload_dict(payload)
+    mode = display_mode_from_payload(payload)
+    ok, out = display_start({"mode": mode})
+    return ok, "Display restart: " + out
+
+def display_blank(payload=None):
+    ok, out = run_shell(["/usr/bin/env", "bash", "-lc", "DISPLAY=:0 xset dpms force off || DISPLAY=:0 xset s activate"], timeout=20)
+    return ok, out
+
+def display_wake(payload=None):
+    ok, out = run_shell(["/usr/bin/env", "bash", "-lc", "DISPLAY=:0 xset dpms force on || DISPLAY=:0 xset s reset"], timeout=20)
+    return ok, out
+
+def display_status(payload=None):
+    lines = display_process_lines()
+    mode = "unknown"
+    url = ""
+    if lines:
+        joined = " ".join(lines)
+        if "mode=lite" in joined or "-lite" in joined:
+            mode = "lite"
+        elif "-full" in joined:
+            mode = "full"
+        if "https://" in joined:
+            url = joined[joined.find("https://"):].split()[0]
+    return True, json.dumps({
+        "running": bool(lines),
+        "mode": mode,
+        "url": url,
+        "process_count": len(lines),
+        "browser": display_browser_path() if (DISPLAY_BROWSER or shutil.which("chromium") or os.path.exists("/usr/lib/chromium/chromium")) else "",
+    }, sort_keys=True)
+
 def payload_volume(payload):
     payload = ensure_payload_dict(payload)
     try:
@@ -299,6 +439,30 @@ def run_command(command_name, payload):
     if command_name == "local_status":
         return local_status(payload)
 
+    if command_name == "display_start":
+        return display_start(payload)
+
+    if command_name == "display_stop":
+        return display_stop(payload)
+
+    if command_name == "display_restart":
+        return display_restart(payload)
+
+    if command_name == "display_lite":
+        return display_start({"mode": "lite"})
+
+    if command_name == "display_full":
+        return display_start({"mode": "full"})
+
+    if command_name == "display_blank":
+        return display_blank(payload)
+
+    if command_name == "display_wake":
+        return display_wake(payload)
+
+    if command_name == "display_status":
+        return display_status(payload)
+
     if command_name == "update_agent":
         return run_shell(["sudo", "/opt/dttd-pi-node/scripts/update.sh"], timeout=300)
 
@@ -325,6 +489,8 @@ def send_heartbeat():
         "raspotify_running": service_running("raspotify"),
         "mpd_running": service_running("mpd"),
         "local_music_mounted": local_mount_ready(),
+        "display_browser_running": display_running(),
+        "display_status": json.loads(display_status()[1]),
     }
     print("Heartbeat:", post_json(HEARTBEAT_URL, payload), flush=True)
 

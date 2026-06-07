@@ -34,7 +34,7 @@ fi
 echo "Installing DTTD Pi node for ${DISPLAY_NAME}"
 
 apt-get update
-apt-get install -y curl git rsync python3 avahi-daemon avahi-utils alsa-utils cifs-utils mpd mpc
+apt-get install -y curl git rsync python3 avahi-daemon avahi-utils alsa-utils cifs-utils mpd mpc x11-xserver-utils
 
 # Raspotify install. If already installed, this is harmless.
 if ! command -v librespot >/dev/null 2>&1; then
@@ -50,6 +50,11 @@ SECRET=DMX_NODE_SECRET_7f2c9e4a1b8d6f0c3e5a9d7b2f4c8e1
 NODE_KEY=${NODE_KEY}
 DISPLAY_NAME=${DISPLAY_NAME}
 SPOTIFY_NAME=${DISPLAY_NAME}
+DISPLAY_URL_FULL=https://live.dancethruthedecades.co.uk/
+DISPLAY_URL_LITE=https://live.dancethruthedecades.co.uk/?mode=lite
+DISPLAY_BROWSER=
+DISPLAY_PROFILE_BASE=/home/disco/.config/dttd-display-chromium
+DISPLAY_LOG=/tmp/dttd-display.log
 EOF
 
 hostnamectl set-hostname "${HOSTNAME}"
