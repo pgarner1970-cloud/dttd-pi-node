@@ -38,6 +38,7 @@ MPD_HOST = CONFIG.get("MPD_HOST", "localhost")
 MPD_PORT = CONFIG.get("MPD_PORT", "6600")
 DISPLAY_URL_FULL = CONFIG.get("DISPLAY_URL_FULL", "https://live.dancethruthedecades.co.uk/")
 DISPLAY_URL_LITE = CONFIG.get("DISPLAY_URL_LITE", "https://live.dancethruthedecades.co.uk/?mode=lite")
+DISPLAY_URL_LOGO = CONFIG.get("DISPLAY_URL_LOGO", "https://live.dancethruthedecades.co.uk/?mode=logo")
 DISPLAY_BROWSER = CONFIG.get("DISPLAY_BROWSER", "").strip()
 DISPLAY_PROFILE_BASE = CONFIG.get("DISPLAY_PROFILE_BASE", "/home/disco/.config/dttd-display-chromium")
 DISPLAY_LOG = CONFIG.get("DISPLAY_LOG", "/tmp/dttd-display.log")
@@ -293,11 +294,13 @@ def display_browser_path():
 def display_mode_from_payload(payload):
     payload = ensure_payload_dict(payload)
     mode = str(payload.get("mode", "lite") or "lite").strip().lower()
-    return "full" if mode == "full" else "lite"
+    return mode if mode in ("full", "lite", "logo") else "lite"
 
 def display_url_for_mode(mode):
     if mode == "blank":
         return display_blank_url()
+    if mode == "logo":
+        return DISPLAY_URL_LOGO
     return DISPLAY_URL_FULL if mode == "full" else DISPLAY_URL_LITE
 
 def display_blank_url():
@@ -312,6 +315,8 @@ def display_blank_url():
 def display_profile_for_mode(mode):
     if mode == "blank":
         suffix = "blank"
+    elif mode == "logo":
+        suffix = "logo"
     else:
         suffix = "full" if mode == "full" else "lite"
     return DISPLAY_PROFILE_BASE + "-" + suffix
@@ -345,7 +350,7 @@ def display_stop(payload=None):
 def display_start(payload=None):
     payload = ensure_payload_dict(payload)
     mode = str(payload.get("mode", "lite") or "lite").strip().lower()
-    if mode not in ("full", "lite", "blank"):
+    if mode not in ("full", "lite", "blank", "logo"):
         mode = "lite"
     url = str(payload.get("url") or display_url_for_mode(mode))
     browser = display_browser_path()
@@ -389,6 +394,8 @@ def display_start(payload=None):
         return False, "Display browser start command ran but no display process is running. If this node is player-only, disable display controls for it."
     if mode == "blank":
         return True, "Display blanked using black kiosk page"
+    if mode == "logo":
+        return True, "Display logo screen started: %s" % url
     return True, "Display browser started in %s mode: %s" % (mode, url)
 
 def display_restart(payload=None):
@@ -407,7 +414,7 @@ def display_blank(payload=None):
         return False, "Display blank failed: " + str(e)
 
 def display_wake(payload=None):
-    mode = DISPLAY_DEFAULT_MODE if DISPLAY_DEFAULT_MODE in ("full", "lite") else "lite"
+    mode = DISPLAY_DEFAULT_MODE if DISPLAY_DEFAULT_MODE in ("full", "lite", "logo") else "lite"
     return display_start({"mode": mode})
 
 def display_status(payload=None):
@@ -418,6 +425,8 @@ def display_status(payload=None):
         joined = " ".join(lines)
         if "-blank" in joined or "DTTD%20Display%20Blank" in joined or "data:text/html" in joined:
             mode = "blank"
+        elif "mode=logo" in joined or "-logo" in joined:
+            mode = "logo"
         elif "mode=lite" in joined or "-lite" in joined:
             mode = "lite"
         elif "-full" in joined:
@@ -479,6 +488,9 @@ def run_command(command_name, payload):
 
     if command_name == "display_full":
         return display_start({"mode": "full"})
+
+    if command_name == "display_logo":
+        return display_start({"mode": "logo"})
 
     if command_name == "display_blank":
         return display_blank(payload)

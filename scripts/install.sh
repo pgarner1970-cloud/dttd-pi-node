@@ -52,9 +52,11 @@ DISPLAY_NAME=${DISPLAY_NAME}
 SPOTIFY_NAME=${DISPLAY_NAME}
 DISPLAY_URL_FULL=https://live.dancethruthedecades.co.uk/
 DISPLAY_URL_LITE=https://live.dancethruthedecades.co.uk/?mode=lite
+DISPLAY_URL_LOGO=https://live.dancethruthedecades.co.uk/?mode=logo
 DISPLAY_BROWSER=
 DISPLAY_PROFILE_BASE=/home/disco/.config/dttd-display-chromium
 DISPLAY_LOG=/tmp/dttd-display.log
+DISPLAY_DEFAULT_MODE=lite
 EOF
 
 hostnamectl set-hostname "${HOSTNAME}"

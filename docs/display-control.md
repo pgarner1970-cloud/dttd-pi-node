@@ -4,10 +4,11 @@ The node agent can now manage the HDMI display browser as well as the player ser
 
 Supported portal commands:
 
-- `display_start` - start the display browser using the requested mode payload (`lite` or `full`).
+- `display_start` - start the display browser using the requested mode payload (`lite`, `full` or `logo`).
 - `display_restart` - restart the display browser using the requested mode payload.
 - `display_lite` - start/restart the display in lite mode.
 - `display_full` - start/restart the display in full mode.
+- `display_logo` - start/restart the display in branded logo holding-screen mode.
 - `display_stop` - stop the HDMI display browser only.
 - `display_blank` - blank the HDMI display by switching the kiosk browser to a plain black page. This avoids unreliable `xset dpms` behaviour on Wayland/labwc Raspberry Pi desktops.
 - `display_wake` - restart the display using `DISPLAY_DEFAULT_MODE` from `/etc/dmx-node.conf` (`lite` by default).
@@ -19,6 +20,12 @@ Recommended low-memory Raspberry Pi URL:
 
 ```text
 https://live.dancethruthedecades.co.uk/?mode=lite
+```
+
+Branded holding-screen URL used by Show Logo Screen:
+
+```text
+https://live.dancethruthedecades.co.uk/?mode=logo
 ```
 
 The agent auto-detects Chromium in this order:
