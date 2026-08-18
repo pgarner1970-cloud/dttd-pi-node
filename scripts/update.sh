@@ -77,6 +77,11 @@ if [[ "${DTTD_ENABLE_LOCAL_MPD:-1}" == "1" && -x "$REPO_DIR/scripts/install-loca
   "$REPO_DIR/scripts/install-local-mpd.sh" >>"$LOG_FILE" 2>&1 || fail "MPD local playback setup failed"
 fi
 
+if [[ -x "$REPO_DIR/scripts/configure-display-autostart.sh" ]]; then
+  log "Applying deck-specific HDMI display autostart policy"
+  "$REPO_DIR/scripts/configure-display-autostart.sh" >>"$LOG_FILE" 2>&1 || fail "Display autostart setup failed"
+fi
+
 # Refresh installed service file if it changed in Git.
 if [[ -f "$REPO_DIR/systemd/dmx-node-agent.service" ]]; then
   cp "$REPO_DIR/systemd/dmx-node-agent.service" /etc/systemd/system/dmx-node-agent.service

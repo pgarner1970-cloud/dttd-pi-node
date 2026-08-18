@@ -1,32 +1,50 @@
 # DTTD Display Control
 
-The node agent can now manage the HDMI display browser as well as the player service.
+The HDMI display now uses one persistent Chromium kiosk process. Normal event screen changes happen inside the live-display web application rather than by closing and relaunching Chromium.
 
-Supported portal commands:
+## Normal screen modes
 
-- `display_start` - start the display browser using the requested mode payload (`lite`, `full` or `logo`).
-- `display_restart` - restart the display browser using the requested mode payload.
-- `display_lite` - start/restart the display in lite mode.
-- `display_full` - start/restart the display in full mode.
-- `display_logo` - start/restart the display in branded logo holding-screen mode.
-- `display_stop` - stop the HDMI display browser only.
-- `display_blank` - blank the HDMI display by switching the kiosk browser to a plain black page. This avoids unreliable `xset dpms` behaviour on Wayland/labwc Raspberry Pi desktops.
-- `display_wake` - restart the display using `DISPLAY_DEFAULT_MODE` from `/etc/dmx-node.conf` (`lite` by default).
-- `display_status` - return JSON status for the display browser.
+The DJ portal controls these per-node modes through the shared web application state:
+
+- **Show Live** — normal live event display/rotation.
+- **Show Logo** — black holding screen with website QR, DTTD logo and Facebook QR.
+- **Blank** — pure black screen.
+
+Switching Live / Logo / Blank does **not** stop or restart Chromium.
+
+## Process controls
+
+The node agent retains true browser recovery controls:
+
+- `display_start` — launch Chromium if it is not already running. Payload render profile: `lite` or `full`.
+- `display_restart` — deliberately stop and relaunch Chromium using the requested render profile.
+- `display_stop` — deliberately close the HDMI Chromium process.
+- `display_status` — return JSON browser status.
+
+Legacy `display_logo`, `display_blank` and `display_wake` commands are retained safely for compatibility but no longer restart Chromium; normal mode selection is handled by the portal/web page.
 
 The display controls do not stop `librespot`, `raspotify`, MPD or local music playback.
 
-Recommended low-memory Raspberry Pi URL:
+## Persistent display URL
+
+The agent appends its node key to the configured display URL, for example:
 
 ```text
-https://live.dancethruthedecades.co.uk/?mode=lite
+https://live.dancethruthedecades.co.uk/?mode=lite&node=dmx-desk-a
 ```
 
-Branded holding-screen URL used by Show Logo Screen:
+The live page polls the display-control state for that node and overlays Live / Logo / Blank immediately without navigating away.
 
-```text
-https://live.dancethruthedecades.co.uk/?mode=logo
-```
+## Boot policy
+
+`scripts/configure-display-autostart.sh` applies the current event policy:
+
+- **Deck A / dmx-desk-a** — DTTD Chromium display starts automatically with the desktop session.
+- **Deck B / dmx-desk-b** — no automatic DTTD Chromium launch; all display-control capability remains available from the DJ portal.
+
+The update script reapplies this policy after Pi-node updates and removes legacy direct DTTD Chromium lines from the user's labwc autostart file when present.
+
+## Chromium binary
 
 The agent auto-detects Chromium in this order:
 

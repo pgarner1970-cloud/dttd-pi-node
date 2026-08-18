@@ -52,7 +52,6 @@ DISPLAY_NAME=${DISPLAY_NAME}
 SPOTIFY_NAME=${DISPLAY_NAME}
 DISPLAY_URL_FULL=https://live.dancethruthedecades.co.uk/
 DISPLAY_URL_LITE=https://live.dancethruthedecades.co.uk/?mode=lite
-DISPLAY_URL_LOGO=https://live.dancethruthedecades.co.uk/?mode=logo
 DISPLAY_BROWSER=
 DISPLAY_PROFILE_BASE=/home/disco/.config/dttd-display-chromium
 DISPLAY_LOG=/tmp/dttd-display.log
@@ -79,6 +78,7 @@ cp /opt/dttd-pi-node/systemd/dmx-node-agent.service /etc/systemd/system/dmx-node
 chmod +x /opt/dttd-pi-node/agent/dmx-node-agent.py
 chmod +x /opt/dttd-pi-node/scripts/*.sh
 /opt/dttd-pi-node/scripts/install-local-mpd.sh
+/opt/dttd-pi-node/scripts/configure-display-autostart.sh
 
 # Allow the disco user to manage the limited services needed by the portal.
 cat >/etc/sudoers.d/dttd-node-agent <<EOF

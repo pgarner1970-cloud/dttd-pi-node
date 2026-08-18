@@ -9,6 +9,7 @@ import time
 import traceback
 import urllib.request
 import urllib.error
+import urllib.parse
 
 CONFIG_FILE = "/etc/dmx-node.conf"
 HEARTBEAT_INTERVAL_SECONDS = 15
@@ -293,33 +294,18 @@ def display_browser_path():
 
 def display_mode_from_payload(payload):
     payload = ensure_payload_dict(payload)
-    mode = str(payload.get("mode", "lite") or "lite").strip().lower()
-    return mode if mode in ("full", "lite", "logo") else "lite"
+    mode = str(payload.get("mode", DISPLAY_DEFAULT_MODE or "lite") or "lite").strip().lower()
+    return mode if mode in ("full", "lite") else "lite"
 
 def display_url_for_mode(mode):
-    if mode == "blank":
-        return display_blank_url()
-    if mode == "logo":
-        return DISPLAY_URL_LOGO
-    return DISPLAY_URL_FULL if mode == "full" else DISPLAY_URL_LITE
+    base = DISPLAY_URL_FULL if mode == "full" else DISPLAY_URL_LITE
+    separator = "&" if "?" in base else "?"
+    return base + separator + "node=" + urllib.parse.quote(NODE_KEY, safe="")
 
-def display_blank_url():
-    html = (
-        "<html><head><title>DTTD Display Blank</title>"
-        "<meta name='robots' content='noindex,nofollow'>"
-        "<style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;cursor:none}</style>"
-        "</head><body></body></html>"
-    )
-    return "data:text/html," + html
-
-def display_profile_for_mode(mode):
-    if mode == "blank":
-        suffix = "blank"
-    elif mode == "logo":
-        suffix = "logo"
-    else:
-        suffix = "full" if mode == "full" else "lite"
-    return DISPLAY_PROFILE_BASE + "-" + suffix
+def display_profile_for_mode(mode=None):
+    # One Chromium profile is deliberately shared by every screen state.
+    # Live / logo / blank now switch inside the persistent web application.
+    return DISPLAY_PROFILE_BASE
 
 def display_process_lines():
     try:
@@ -349,16 +335,18 @@ def display_stop(payload=None):
 
 def display_start(payload=None):
     payload = ensure_payload_dict(payload)
-    mode = str(payload.get("mode", "lite") or "lite").strip().lower()
-    if mode not in ("full", "lite", "blank", "logo"):
-        mode = "lite"
+    mode = display_mode_from_payload(payload)
     url = str(payload.get("url") or display_url_for_mode(mode))
     browser = display_browser_path()
     profile = display_profile_for_mode(mode)
     os.makedirs(profile, exist_ok=True)
 
-    # Stop any previous kiosk instance using our dedicated profile first.
-    display_stop()
+    # Start means launch only when absent. Mode changes are handled inside the
+    # already-running web page; only Restart deliberately tears Chromium down.
+    if display_running() and not bool(payload.get("force_restart")):
+        return True, "Display browser is already running"
+    if display_running():
+        display_stop()
 
     env = os.environ.copy()
     env.setdefault("DISPLAY", ":0")
@@ -392,30 +380,19 @@ def display_start(payload=None):
     time.sleep(3)
     if not display_running():
         return False, "Display browser start command ran but no display process is running. If this node is player-only, disable display controls for it."
-    if mode == "blank":
-        return True, "Display blanked using black kiosk page"
-    if mode == "logo":
-        return True, "Display logo screen started: %s" % url
-    return True, "Display browser started in %s mode: %s" % (mode, url)
+    return True, "Display browser started in %s render profile: %s" % (mode, url)
 
 def display_restart(payload=None):
     payload = ensure_payload_dict(payload)
     mode = display_mode_from_payload(payload)
-    ok, out = display_start({"mode": mode})
+    ok, out = display_start({"mode": mode, "force_restart": True})
     return ok, "Display restart: " + out
 
 def display_blank(payload=None):
-    # Wayland/labwc desktops on Raspberry Pi often do not expose DPMS to xset,
-    # so xset can return usage text or fail even when the desktop is healthy.
-    # Use a black kiosk page instead; this is reliable and does not touch audio.
-    try:
-        return display_start({"mode": "blank"})
-    except Exception as e:
-        return False, "Display blank failed: " + str(e)
+    return True, "Blank is now an in-page screen mode controlled by the DJ portal; Chromium was left running"
 
 def display_wake(payload=None):
-    mode = DISPLAY_DEFAULT_MODE if DISPLAY_DEFAULT_MODE in ("full", "lite", "logo") else "lite"
-    return display_start({"mode": mode})
+    return True, "Live/logo/blank are now in-page screen modes controlled by the DJ portal; Chromium was left running"
 
 def display_status(payload=None):
     lines = display_process_lines()
@@ -423,13 +400,9 @@ def display_status(payload=None):
     url = ""
     if lines:
         joined = " ".join(lines)
-        if "-blank" in joined or "DTTD%20Display%20Blank" in joined or "data:text/html" in joined:
-            mode = "blank"
-        elif "mode=logo" in joined or "-logo" in joined:
-            mode = "logo"
-        elif "mode=lite" in joined or "-lite" in joined:
+        if "mode=lite" in joined:
             mode = "lite"
-        elif "-full" in joined:
+        else:
             mode = "full"
         if "https://" in joined:
             url = joined[joined.find("https://"):].split()[0]
@@ -490,7 +463,7 @@ def run_command(command_name, payload):
         return display_start({"mode": "full"})
 
     if command_name == "display_logo":
-        return display_start({"mode": "logo"})
+        return True, "Logo is now an in-page screen mode controlled by the DJ portal; Chromium was left running"
 
     if command_name == "display_blank":
         return display_blank(payload)
@@ -594,4 +567,8 @@ def main():
         time.sleep(COMMAND_POLL_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--display-start":
+        ok, message = display_start({"mode": DISPLAY_DEFAULT_MODE})
+        print(message, flush=True)
+        raise SystemExit(0 if ok else 1)
     main()
