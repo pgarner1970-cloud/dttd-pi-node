@@ -5,6 +5,7 @@ import re
 import socket
 import subprocess
 import shutil
+import sys
 import time
 import traceback
 import urllib.request
@@ -518,6 +519,24 @@ def poll_command():
 
     print("Command received:", command_name, flush=True)
 
+    # Reboot/shutdown must be acknowledged before the OS starts going down,
+    # otherwise the agent can disappear before it reports command completion.
+    if command_name in ("reboot", "shutdown"):
+        action_label = "Reboot" if command_name == "reboot" else "Shutdown"
+        try:
+            post_json(COMMAND_URL, {
+                "mode": "complete",
+                "node_key": NODE_KEY,
+                "command_id": command_id,
+                "status": "completed",
+                "result": action_label + " command accepted",
+            })
+            command = ["sudo", "reboot"] if command_name == "reboot" else ["sudo", "shutdown", "-h", "now"]
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        except Exception as e:
+            print(action_label + " command failed:", str(e), flush=True)
+        return
+
     try:
         success, result = run_command(command_name, payload)
         status = "completed" if success else "failed"
@@ -525,11 +544,6 @@ def poll_command():
         status = "failed"
         result = str(e)
         traceback.print_exc()
-
-    if command_name == "reboot":
-        result = "Reboot command accepted"
-    elif command_name == "shutdown":
-        result = "Shutdown command accepted"
 
     post_json(COMMAND_URL, {
         "mode": "complete",
