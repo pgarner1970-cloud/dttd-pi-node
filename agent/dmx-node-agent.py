@@ -324,6 +324,42 @@ def display_process_lines():
 def display_running():
     return bool(display_process_lines())
 
+def ensure_graphical_session():
+    # Deck B normally boots headless. Starting the display must therefore bring
+    # up graphical.target first. The helper is harmless on Deck A where :0 is
+    # normally already available.
+    helper = "/opt/dttd-pi-node/scripts/start-display-session.sh"
+    if not os.path.exists(helper):
+        return True, "Display-session helper is not installed"
+    return run_shell(["sudo", helper], timeout=60)
+
+def ensure_cursor_hidden(env):
+    # Hide the pointer in kiosk mode but keep it available if somebody moves a
+    # real mouse for maintenance. Avoid starting duplicate unclutter processes.
+    if not shutil.which("unclutter"):
+        return
+    try:
+        existing = subprocess.run(
+            ["pgrep", "-u", str(os.getuid()), "-x", "unclutter"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+        if existing.returncode == 0:
+            return
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(
+            ["unclutter", "-idle", "0.2", "-root"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            start_new_session=True,
+        )
+    except Exception:
+        pass
+
 def display_stop(payload=None):
     lines = display_process_lines()
     if not lines:
@@ -342,6 +378,12 @@ def display_start(payload=None):
     profile = display_profile_for_mode(mode)
     os.makedirs(profile, exist_ok=True)
 
+    # Deck B normally has no desktop after boot. Bring the graphical target up
+    # on demand before attempting to connect Chromium to X display :0.
+    session_ok, session_message = ensure_graphical_session()
+    if not session_ok:
+        return False, "Display session could not be started: " + session_message
+
     # Start means launch only when absent. Mode changes are handled inside the
     # already-running web page; only Restart deliberately tears Chromium down.
     if display_running() and not bool(payload.get("force_restart")):
@@ -352,6 +394,7 @@ def display_start(payload=None):
     env = os.environ.copy()
     env.setdefault("DISPLAY", ":0")
     env.setdefault("XDG_RUNTIME_DIR", "/run/user/%s" % os.getuid())
+    ensure_cursor_hidden(env)
 
     command = [
         browser,

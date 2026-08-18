@@ -54,3 +54,12 @@ The agent auto-detects Chromium in this order:
 4. `/usr/bin/chromium-browser`
 
 On low-memory Raspberry Pis, `/usr/lib/chromium/chromium` avoids the Raspberry Pi browser launcher prompt.
+
+## Deck-specific boot policy
+
+The display policy is enforced by `scripts/configure-display-autostart.sh` on install and update:
+
+- `dmx-desk-a`: default target is `graphical.target`; the DTTD kiosk starts automatically with the `disco` desktop session.
+- `dmx-desk-b`: default target is `multi-user.target`; no DTTD kiosk is auto-launched after reboot. `Start Display` invokes `scripts/start-display-session.sh`, starts `graphical.target` for that session, waits for X11 display `:0`, and then starts Chromium.
+- `Stop Display` closes Chromium only. It does not change Deck B's boot target; the next reboot returns it to headless mode.
+- `unclutter` is installed and started with the kiosk so the mouse pointer disappears during Live, Logo and Blank screens.

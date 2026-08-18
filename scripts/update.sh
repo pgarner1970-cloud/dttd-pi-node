@@ -72,6 +72,19 @@ log "Applying executable permissions"
 chmod +x "$REPO_DIR/agent/dmx-node-agent.py"
 find "$REPO_DIR/scripts" -type f -name '*.sh' -exec chmod +x {} \;
 
+if ! command -v unclutter >/dev/null 2>&1; then
+  log "Installing unclutter to hide the kiosk mouse pointer"
+  apt-get update >>"$LOG_FILE" 2>&1 || fail "Package index update failed"
+  apt-get install -y unclutter >>"$LOG_FILE" 2>&1 || fail "unclutter installation failed"
+fi
+
+# Refresh the narrowly-scoped sudo permission used to bring Deck B's graphical
+# target up when Start Display is requested.
+cat >/etc/sudoers.d/dttd-node-agent <<'SUDOERS'
+disco ALL=(root) NOPASSWD: /bin/systemctl restart raspotify, /bin/systemctl restart dmx-node-agent, /bin/systemctl restart mpd, /bin/systemctl is-active raspotify, /bin/systemctl is-active mpd, /sbin/reboot, /usr/sbin/reboot, /sbin/shutdown, /usr/sbin/shutdown, /opt/dttd-pi-node/scripts/healthcheck.sh, /opt/dttd-pi-node/scripts/update.sh, /opt/dttd-pi-node/scripts/set-usb-audio.sh, /opt/dttd-pi-node/scripts/set-volume.sh, /opt/dttd-pi-node/scripts/install-local-mpd.sh, /opt/dttd-pi-node/scripts/start-display-session.sh
+SUDOERS
+chmod 440 /etc/sudoers.d/dttd-node-agent
+
 if [[ "${DTTD_ENABLE_LOCAL_MPD:-1}" == "1" && -x "$REPO_DIR/scripts/install-local-mpd.sh" ]]; then
   log "Ensuring MPD local playback support is installed"
   "$REPO_DIR/scripts/install-local-mpd.sh" >>"$LOG_FILE" 2>&1 || fail "MPD local playback setup failed"
